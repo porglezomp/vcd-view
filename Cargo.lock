@@ -1,0 +1,14 @@
+[[package]]
+name = "vcd"
+version = "0.3.0"
+source = "git+https://github.com/kevinmehall/rust-vcd.git#fce0896c1da4d9c02f9305256bde35083bbf76f0"
+
+[[package]]
+name = "vcd-view"
+version = "0.1.0"
+dependencies = [
+ "vcd 0.3.0 (git+https://github.com/kevinmehall/rust-vcd.git)",
+]
+
+[metadata]
+"checksum vcd 0.3.0 (git+https://github.com/kevinmehall/rust-vcd.git)" = "<none>"
