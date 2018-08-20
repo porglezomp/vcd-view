@@ -5,6 +5,37 @@ extern crate vcd;
 use std::collections::BTreeMap;
 use vcd::{Command, IdCode, Parser, ScopeItem, Var};
 
+static HEADER: &str = r#"<!DOCTYPE html>
+<html>
+<head>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; }
+ul { list-style: none; padding-left: 20px; margin-top: 0; }
+#container { height: 100vh; display: flex; }
+#controls { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 20vw; }
+#display { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 80vw; }
+svg { transform-origin: top left; }
+polyline { fill: none; stroke: black; vector-effect: non-scaling-stroke; }
+rect.x { fill: #F66; stroke: #F00; rx: 0.5; ry: 0.5; }
+rect.vec { fill: none; stroke: black; rx: 0.5; ry: 0.5; }
+</style>
+</head>
+<body>
+<div id="container">
+<div id="controls">"#;
+
+static FOOTER: &str = r#"</svg>
+</div>
+</div>
+<script>
+document.querySelectorAll('.wave').forEach((elem, i) => {
+  elem.setAttribute('transform', `translate(0 ${i * 15})`);
+});
+</script>
+</body>
+</html>"#;
+
 #[derive(Debug)]
 enum Value {
     Scalar(vcd::Value),
@@ -69,6 +100,14 @@ fn main() -> std::io::Result<()> {
         .unwrap_or(0)
         + 10;
 
+    println!("{}", HEADER);
+    print_vars(&header);
+    println!(
+        r#"</div>
+<div id="display">
+<svg transform="scale(10 2)" preserveAspectRatio="none" width="{}">"#,
+        end_time
+    );
     for wave in waves.values_mut() {
         render_svg(wave, end_time);
         if let Some(ref svg) = wave.svg {
@@ -76,7 +115,43 @@ fn main() -> std::io::Result<()> {
             println!("{}", svg.wave);
         }
     }
+    println!("{}", FOOTER);
+
     Ok(())
+}
+
+fn print_vars(header: &vcd::Header) {
+    fn print_var(v: &Var) {
+        println!(
+            r#"<li class="var" data-name="{}" data-id="{}">{}</li>"#,
+            v.reference, v.code, v.reference
+        );
+    }
+    fn print_scope(s: &vcd::Scope) {
+        println!(
+            r#"<li class="scope" data-name="{}">{}
+<ul>"#,
+            s.identifier, s.identifier
+        );
+        for child in &s.children {
+            match child {
+                ScopeItem::Var(var) => print_var(var),
+                ScopeItem::Scope(scope) => print_scope(scope),
+            }
+        }
+        println!(
+            r#"</ul>
+</li>"#
+        );
+    }
+    println!("<ul>");
+    for item in &header.items {
+        match item {
+            ScopeItem::Var(var) => print_var(var),
+            ScopeItem::Scope(scope) => print_scope(scope),
+        }
+    }
+    println!("</ul>");
 }
 
 fn render_svg(wave: &mut Wave, end_time: u64) {
@@ -158,7 +233,7 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
         }
         wave.svg = Some(Svg {
             wave: format!(
-                r#"<g data-name="{}" data-size="1">{}</g>"#,
+                r#"<g class="wave" data-id="{}" data-size="1">{}</g>"#,
                 wave.var.code,
                 svg_parts.concat()
             ),
