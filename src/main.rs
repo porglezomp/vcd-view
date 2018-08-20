@@ -12,7 +12,14 @@ static HEADER: &str = r#"<!DOCTYPE html>
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; }
-ul { list-style: none; padding-left: 20px; margin-top: 0; }
+ul { padding-left: 10px; list-style: none; margin-top: 0; }
+ul ul { padding-left: 20px; }
+li.scope > .arrow {
+  display: inline-block; width: 10px; height: 10px; border: solid black;
+  border-width: 0 5px 5px 0; transform: rotate(45deg); margin: 0 2px 0 -12px;
+}
+li.scope.closed > .arrow { transform: rotate(-45deg); }
+li.scope.closed ul { display: none; }
 #container { height: 100vh; display: flex; }
 #controls { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 20vw; }
 #display { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 80vw; }
@@ -26,7 +33,9 @@ rect.vec { fill: none; stroke: black; }
 </head>
 <body>
 <div id="container">
-<div id="controls">"#;
+<div id="controls">
+<label for="scale">Scale</label>
+<input type="text" id="scale" name="scale" value="10"/>"#;
 
 static FOOTER: &str = r#"</svg>
 </div>
@@ -65,6 +74,10 @@ function fixBBox() {
   svg.setAttribute('width', bbox.width);
   svg.setAttribute('height', bbox.height);
 }
+
+document.querySelectorAll('.arrow').forEach(elt =>
+  elt.addEventListener('click', event =>
+    event.currentTarget.parentElement.classList.toggle('closed')));
 
 setScale(10, 2);
 fixBBox();
@@ -159,15 +172,18 @@ fn main() -> std::io::Result<()> {
 fn print_vars(header: &vcd::Header) {
     fn print_var(v: &Var) {
         println!(
-            r#"<li class="var" data-name="{}" data-id="{}">{}</li>"#,
-            v.reference, v.code, v.reference
+            r#"<li class="var">
+<label><input type="checkbox" data-id="{id}" checked/>{name}</label></li>"#,
+            name = v.reference,
+            id = v.code,
         );
     }
     fn print_scope(s: &vcd::Scope) {
         println!(
-            r#"<li class="scope" data-name="{}">{}
+            r#"<li class="scope closed">
+<div class="arrow"></div><label><input type="checkbox" data-name="{name}" checked/>{name}</label>
 <ul>"#,
-            s.identifier, s.identifier
+            name = s.identifier,
         );
         for child in &s.children {
             match child {
