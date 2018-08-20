@@ -78,7 +78,7 @@ function showVisibleWaves() {
 
   const svg = document.querySelector('svg');
   let bbox = svg.getBBox();
-  svg.setAttribute('width', bbox.width);
+  svg.setAttribute('width', bbox.width / 2);
   svg.setAttribute('height', bbox.height);
 }
 
@@ -103,6 +103,14 @@ function updateIndeterminate(elt) {
   updateIndeterminate(elt.parentElement);
 }
 
+function inputScale(elt) {
+  let x = parseFloat(elt.value);
+  if (x > 0) {
+    console.log(x);
+    setScale(x, 2.5)
+  }
+}
+
 document.querySelectorAll('.arrow').forEach(elt =>
   elt.addEventListener('click', event =>
     event.currentTarget.parentElement.classList.toggle('closed')));
@@ -119,9 +127,12 @@ document.querySelectorAll('input[type="checkbox"]').forEach(elt =>
     updateIndeterminate(elt);
     showVisibleWaves();
   }));
+document.getElementById('scale').addEventListener('change', event =>
+  inputScale(event.currentTarget));
 
-setScale(10, 2);
+setScale(10, 2.5);
 showVisibleWaves();
+inputScale(document.getElementById('scale'));
 </script>
 </body>
 </html>"#;
@@ -195,7 +206,7 @@ fn main() -> std::io::Result<()> {
     println!(
         r#"</div>
 <div id="display">
-<svg transform="scale(10 2)" preserveAspectRatio="none" width="{}">"#,
+<svg transform="scale(10 2.5)" preserveAspectRatio="none" width="{}">"#,
         end_time
     );
     for wave in waves.values_mut() {
