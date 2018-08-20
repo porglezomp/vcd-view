@@ -159,11 +159,8 @@ fn main() -> std::io::Result<()> {
     );
     for wave in waves.values_mut() {
         render_svg(wave, end_time);
-        if let Some(ref svg) = wave.svg {
-            // println!("Wave {}:", wave.var.reference);
-            println!("{}", svg.wave);
-        }
     }
+    print_waves(&header, &waves);
     println!("{}", FOOTER);
 
     Ok(())
@@ -204,6 +201,31 @@ fn print_vars(header: &vcd::Header) {
         }
     }
     println!("</ul>");
+}
+
+fn print_waves(header: &vcd::Header, waves: &BTreeMap<IdCode, Wave>) {
+    fn print_wave(wave: &Wave) {
+        if let Some(ref svg) = wave.svg {
+            // println!("Wave {}:", wave.var.reference);
+            println!("{}", svg.wave);
+        }
+    }
+
+    fn print_scope(scope: &vcd::Scope, waves: &BTreeMap<IdCode, Wave>) {
+        for child in &scope.children {
+            match child {
+                ScopeItem::Var(v) => print_wave(&waves[&v.code]),
+                ScopeItem::Scope(s) => print_scope(s, waves),
+            }
+        }
+    }
+
+    for item in &header.items {
+        match item {
+            ScopeItem::Var(v) => print_wave(&waves[&v.code]),
+            ScopeItem::Scope(s) => print_scope(s, waves),
+        }
+    }
 }
 
 fn render_svg(wave: &mut Wave, end_time: u64) {
