@@ -8,6 +8,7 @@ use vcd::{Command, IdCode, Parser, ScopeItem, Var};
 static HEADER: &str = r#"<!DOCTYPE html>
 <html>
 <head>
+<meta charset="utf8">
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; }
@@ -15,10 +16,12 @@ ul { list-style: none; padding-left: 20px; margin-top: 0; }
 #container { height: 100vh; display: flex; }
 #controls { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 20vw; }
 #display { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 80vw; }
-svg { transform-origin: top left; }
-polyline { fill: none; stroke: black; vector-effect: non-scaling-stroke; }
-rect.x { fill: #F66; stroke: #F00; rx: 0.5; ry: 0.5; }
-rect.vec { fill: none; stroke: black; rx: 0.5; ry: 0.5; }
+#display > svg { transform-origin: top left; overflow: visible; }
+text { transform: scale(0.1, 0.5); text-anchor: middle; font-size: 10px; transform-origin: center center; }
+polyline, rect { stroke-width: 2px; vector-effect: non-scaling-stroke; }
+polyline { fill: none; stroke: black; }
+rect.x { fill: #F66; stroke: #F00; }
+rect.vec { fill: none; stroke: black; }
 </style>
 </head>
 <body>
@@ -32,11 +35,44 @@ static FOOTER: &str = r#"</svg>
 document.querySelectorAll('.wave').forEach((elem, i) => {
   elem.setAttribute('transform', `translate(0 ${i * 15})`);
 });
+
+let textRule = null;
+function findTextRule() {
+  const sheets = document.styleSheets;
+  let done = false;
+  for (let i = 0; i < sheets.length && !done; i++) {
+    const rules = sheets[i].cssRules;
+    for (let j = 0; j < rules.length; j++) {
+      if (rules[j].selectorText === 'text') {
+        textRule = rules[j];
+        done = true;
+        break;
+      }
+    }
+  }
+}
+
+function setScale(x, y) {
+  if (!textRule) { findTextRule(); }
+  const svg = document.querySelector('#display > svg');
+  svg.setAttribute('transform', `scale(${x}, ${y})`);
+  textRule.style.setProperty('transform', `scale(${1 / x}, ${1 / y})`);
+}
+
+function fixBBox() {
+  const svg = document.querySelector('svg');
+  let bbox = svg.getBBox();
+  svg.setAttribute('width', bbox.width);
+  svg.setAttribute('height', bbox.height);
+}
+
+setScale(10, 2);
+fixBBox();
 </script>
 </body>
 </html>"#;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Value {
     Scalar(vcd::Value),
     Vector(Vec<vcd::Value>),
@@ -159,9 +195,9 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
         return;
     }
 
-    enum State {
+    enum State<'a> {
         Wave(Vec<(u64, bool)>),
-        // Vec(u64, Vec<vcd::Value>),
+        Vec(u64, &'a [vcd::Value]),
         X(u64),
     }
     let mut svg_parts = Vec::new();
@@ -171,9 +207,22 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
             return;
         }
         parts.push(format!(
-            r#"<rect x="{}" y="0" width="{}" height="10"/>"#,
+            r#"<rect class="x" rx="1" ry="1" x="{}" y="0" width="{}" height="10"/>"#,
             start,
             end - start
+        ));
+    }
+
+    fn add_vec(parts: &mut Vec<String>, start: u64, end: u64, value: &[vcd::Value]) {
+        parts.push(format!(
+            r#"<rect class="vec" rx="1" ry="1" x="{x}" y="0" width="{width}" height="10"/>
+<svg x="{x}" y="0" width="{width}" height="10" preserveAspectRatio="none" viewBox="0 0 {width} 10">
+<text x="{center}" y="8">{text}</text>
+</svg>"#,
+            x = start,
+            width = end - start,
+            center = (end - start) / 2,
+            text = FmtVec(value),
         ));
     }
 
@@ -199,8 +248,8 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
         parts.push(text)
     }
 
+    let mut state = State::X(0);
     if wave.var.size == 1 {
-        let mut state = State::X(0);
         for &(time, ref point) in &wave.values {
             use vcd::Value::*;
             state = match (state, point) {
@@ -230,17 +279,56 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
         match state {
             State::X(x) => add_undet(&mut svg_parts, x, end_time),
             State::Wave(items) => add_wave(&mut svg_parts, items, end_time),
+            // Doesn't occur for a single element
+            State::Vec(..) => (),
         }
         wave.svg = Some(Svg {
             wave: format!(
                 r#"<g class="wave" data-id="{}" data-size="1">{}</g>"#,
                 wave.var.code,
-                svg_parts.concat()
+                svg_parts.concat(),
             ),
             bits: Vec::new(),
         })
     } else {
-        // println!("Skipping wave {} ({})", wave.var.reference, wave.var.size);
+        for &(time, ref point) in &wave.values {
+            use vcd::Value::*;
+            state = match (state, point) {
+                (State::X(x), Value::Vector(items)) => {
+                    add_undet(&mut svg_parts, x, time);
+                    State::Vec(time, &items)
+                }
+                (State::Vec(x, items), Value::Vector(items2)) => {
+                    if items != &items2[..] {
+                        add_vec(&mut svg_parts, x, time, items);
+                        State::Vec(time, &items2)
+                    } else {
+                        State::Vec(x, &items)
+                    }
+                }
+                (State::Vec(x, items), Value::Scalar(X))
+                | (State::Vec(x, items), Value::Scalar(Z)) => {
+                    add_vec(&mut svg_parts, x, time, items);
+                    State::X(time)
+                }
+                (state, _) => state,
+            }
+        }
+        match state {
+            State::X(x) => add_undet(&mut svg_parts, x, end_time),
+            State::Vec(x, items) => add_vec(&mut svg_parts, x, end_time, items),
+            // Doesn't occur for a vector
+            State::Wave(..) => (),
+        }
+        wave.svg = Some(Svg {
+            wave: format!(
+                r#"<g class="wave" data-id="{}" data-size="{}">{}</g>"#,
+                wave.var.code,
+                wave.var.size,
+                svg_parts.concat(),
+            ),
+            bits: Vec::new(),
+        })
     }
 }
 
@@ -282,4 +370,18 @@ fn make_waves(items: &[ScopeItem]) -> BTreeMap<IdCode, Wave> {
     let mut waves = BTreeMap::new();
     add_waves(&mut waves, items);
     waves
+}
+
+struct FmtVec<'a>(&'a [vcd::Value]);
+impl<'a> std::fmt::Display for FmtVec<'a> {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let value = self.0.iter().fold(0, |acc, item| {
+            use vcd::Value::*;
+            acc * 2 + match item {
+                X | Z | V0 => 0,
+                V1 => 1,
+            }
+        });
+        write!(fmt, "{:#0width$x}", value, width = self.0.len() / 4)
+    }
 }
