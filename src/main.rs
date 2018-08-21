@@ -5,137 +5,8 @@ extern crate vcd;
 use std::collections::BTreeMap;
 use vcd::{Command, IdCode, Parser, ScopeItem, Var};
 
-static HEADER: &str = r#"<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf8">
-<style>
-* { box-sizing: border-box; }
-body { margin: 0; }
-ul { padding-left: 10px; list-style: none; margin-top: 0; }
-ul ul { padding-left: 20px; }
-li.scope > .arrow {
-  display: inline-block; width: 10px; height: 10px; border: solid black;
-  border-width: 0 5px 5px 0; transform: rotate(45deg); margin: 0 2px 0 -12px;
-}
-li.scope.closed > .arrow { transform: rotate(-45deg); }
-li.scope.closed ul { display: none; }
-#container { height: 100vh; display: flex; }
-#controls { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 20vw; }
-#display { flex: 0 0 auto; padding: 10px; overflow: scroll; width: 80vw; }
-#display > svg { transform-origin: top left; overflow: visible; }
-text { transform: scale(0.1, 0.5); text-anchor: middle; font-size: 10px; transform-origin: center center; }
-polyline, rect { stroke-width: 2px; vector-effect: non-scaling-stroke; }
-polyline { fill: none; stroke: black; }
-rect.x { fill: #F66; stroke: #F00; }
-rect.vec { fill: none; stroke: black; }
-</style>
-</head>
-<body>
-<div id="container">
-<div id="controls">
-<label for="scale">Scale</label>
-<input type="text" id="scale" name="scale" value="10"/>"#;
-
-static FOOTER: &str = r#"</svg>
-</div>
-</div>
-<script>
-let textRule = null;
-function findTextRule() {
-  const sheets = document.styleSheets;
-  let done = false;
-  for (let i = 0; i < sheets.length && !done; i++) {
-    const rules = sheets[i].cssRules;
-    for (let j = 0; j < rules.length; j++) {
-      if (rules[j].selectorText === 'text') {
-        textRule = rules[j];
-        done = true;
-        break;
-      }
-    }
-  }
-}
-
-function setScale(x, y) {
-  if (!textRule) { findTextRule(); }
-  const svg = document.querySelector('#display > svg');
-  svg.setAttribute('transform', `scale(${x}, ${y})`);
-  textRule.style.setProperty('transform', `scale(${1 / x}, ${1 / y})`);
-}
-
-function showVisibleWaves() {
-  let i = 0;
-  document.querySelectorAll('.wave').forEach(elem => {
-    if (document.querySelector(`input[type="checkbox"][data-id="${elem.dataset.id}"]`).checked) {
-      elem.setAttribute('transform', `translate(0 ${i * 15})`);
-      elem.style.display = 'inline';
-      i += 1;
-    } else {
-      elem.style.display = 'none';
-    }
-  });
-
-  const svg = document.querySelector('svg');
-  let bbox = svg.getBBox();
-  svg.setAttribute('width', bbox.width / 2);
-  svg.setAttribute('height', bbox.height);
-}
-
-function updateIndeterminate(elt) {
-  if (!elt) return;
-  if (elt.classList.contains('scope')) {
-    let checkbox = elt.querySelector('.scope-checkbox');
-    let checkCount = elt.querySelectorAll('input[type="checkbox"]:checked').length;
-    let uncheckCount = elt.querySelectorAll('input[type="checkbox"]:not(:checked)').length;
-    if (checkbox.checked) { checkCount -= 1; } else { uncheckCount -= 1; }
-    if (checkCount !== 0 && uncheckCount !== 0) {
-      checkbox.indeterminate = true;
-      checkbox.checked = false;
-    } else if (checkCount !== 0) {
-      checkbox.indeterminate = false;
-      checkbox.checked = true;
-    } else if (uncheckCount !== 0) {
-      checkbox.indeterminate = false;
-      checkbox.checked = false;
-    }
-  }
-  updateIndeterminate(elt.parentElement);
-}
-
-function inputScale(elt) {
-  let x = parseFloat(elt.value);
-  if (x > 0) {
-    console.log(x);
-    setScale(x, 2.5)
-  }
-}
-
-document.querySelectorAll('.arrow').forEach(elt =>
-  elt.addEventListener('click', event =>
-    event.currentTarget.parentElement.classList.toggle('closed')));
-
-document.querySelectorAll('input[type="checkbox"]').forEach(elt =>
-  elt.addEventListener('change', event => {
-    const elt = event.currentTarget;
-    if (elt.classList.contains('scope-checkbox')) {
-      console.log(elt.checked);
-      elt.parentElement.parentElement.querySelectorAll('input[type="checkbox"]').forEach(checkbox => console.log(checkbox));
-      elt.parentElement.parentElement.querySelectorAll('input[type="checkbox"]').forEach(checkbox =>
-        checkbox.checked = elt.checked);
-    }
-    updateIndeterminate(elt);
-    showVisibleWaves();
-  }));
-document.getElementById('scale').addEventListener('change', event =>
-  inputScale(event.currentTarget));
-
-setScale(10, 2.5);
-showVisibleWaves();
-inputScale(document.getElementById('scale'));
-</script>
-</body>
-</html>"#;
+static HEADER: &str = include_str!("header.html");
+static FOOTER: &str = include_str!("footer.html");
 
 #[derive(Debug, PartialEq)]
 enum Value {
@@ -200,84 +71,119 @@ fn main() -> std::io::Result<()> {
         .max()
         .unwrap_or(0)
         + 10;
-
-    println!("{}", HEADER);
-    print_vars(&header);
-    println!(
-        r#"</div>
-<div id="display">
-<svg transform="scale(10 2.5)" preserveAspectRatio="none" width="{}">"#,
-        end_time
-    );
     for wave in waves.values_mut() {
         render_svg(wave, end_time);
     }
+
+    println!("{}", HEADER);
+    print_vars(&header);
+    println!(r#"<div id="display">"#);
+    print_names(&header);
     print_waves(&header, &waves);
     println!("{}", FOOTER);
 
     Ok(())
 }
 
-fn print_vars(header: &vcd::Header) {
-    fn print_var(v: &Var) {
-        println!(
-            r#"<li class="var">
-<label><input type="checkbox" data-id="{id}" checked/>{name}</label></li>"#,
-            name = v.reference,
-            id = v.code,
-        );
-    }
-    fn print_scope(s: &vcd::Scope) {
-        println!(
-            r#"<li class="scope closed">
-<div class="arrow"></div><label><input class="scope-checkbox" type="checkbox" data-name="{name}" checked/>{name}</label>
-<ul>"#,
-            name = s.identifier,
-        );
+fn walk_dfs(
+    open: impl Fn(),
+    open_scope: impl Fn(&vcd::Scope),
+    do_var: impl Fn(&Var),
+    close_scope: impl Fn(&vcd::Scope),
+    close: impl Fn(),
+    header: &vcd::Header,
+) {
+    fn walk_scope(
+        open_scope: &impl Fn(&vcd::Scope),
+        do_var: &impl Fn(&Var),
+        close_scope: &impl Fn(&vcd::Scope),
+        s: &vcd::Scope,
+    ) {
+        open_scope(s);
         for child in &s.children {
             match child {
-                ScopeItem::Var(var) => print_var(var),
-                ScopeItem::Scope(scope) => print_scope(scope),
+                ScopeItem::Var(var) => do_var(var),
+                ScopeItem::Scope(s) => walk_scope(open_scope, do_var, close_scope, s),
             }
         }
-        println!(
-            r#"</ul>
-</li>"#
-        );
+        close_scope(s);
     }
-    println!("<ul>");
+    open();
     for item in &header.items {
         match item {
-            ScopeItem::Var(var) => print_var(var),
-            ScopeItem::Scope(scope) => print_scope(scope),
+            ScopeItem::Var(var) => do_var(var),
+            ScopeItem::Scope(scope) => walk_scope(&open_scope, &do_var, &close_scope, scope),
         }
     }
-    println!("</ul>");
+    close();
+}
+
+fn print_vars(header: &vcd::Header) {
+    walk_dfs(
+        || println!("<ul>"),
+        |s| {
+            println!(
+                r#"<li class="scope closed">
+<div class="arrow"></div><label><input class="scope-checkbox" type="checkbox" data-name="{name}" checked/>{name}</label>
+<ul>"#,
+                name = s.identifier,
+            )
+        },
+        |v| {
+            println!(
+                r#"<li class="var">
+<label><input type="checkbox" data-id="{id}" checked/>{name}</label></li>"#,
+                id = v.code,
+                name = v.reference,
+            )
+        },
+        |_| println!("</ul>\n</li>"),
+        || println!("</ul></div>"),
+        header,
+    );
+}
+
+fn print_names(header: &vcd::Header) {
+    walk_dfs(
+        || println!(r#"<div id="labels"><ul>"#),
+        |_| (),
+        |v| {
+            println!(
+                r#"<li data-id="{id}">{name}</li>"#,
+                id = v.code,
+                name = v.reference
+            )
+        },
+        |_| (),
+        || println!("</ul></div>"),
+        header,
+    );
 }
 
 fn print_waves(header: &vcd::Header, waves: &BTreeMap<IdCode, Wave>) {
-    fn print_wave(wave: &Wave) {
-        if let Some(ref svg) = wave.svg {
-            // println!("Wave {}:", wave.var.reference);
-            println!("{}", svg.wave);
-        }
-    }
-
-    fn print_scope(scope: &vcd::Scope, waves: &BTreeMap<IdCode, Wave>) {
-        for child in &scope.children {
-            match child {
-                ScopeItem::Var(v) => print_wave(&waves[&v.code]),
-                ScopeItem::Scope(s) => print_scope(s, waves),
+    let wave_count: usize = waves
+        .values()
+        .map(|wave| match wave.svg {
+            Some(Svg { ref bits, .. }) => 1 + bits.len(),
+            _ => 0,
+        }).sum();
+    let height = wave_count * 40 + 20;
+    walk_dfs(
+        || println!(r#"<div id="waves" style="height: {}px;"><ul>"#, height),
+        |_| (),
+        |v| {
+            if let Some(ref svg) = waves[&v.code].svg {
+                println!(
+                    r#"<li data-id="{id}">{wave}</li>"#,
+                    id = v.code,
+                    wave = svg.wave
+                );
             }
-        }
-    }
-
-    for item in &header.items {
-        match item {
-            ScopeItem::Var(v) => print_wave(&waves[&v.code]),
-            ScopeItem::Scope(s) => print_scope(s, waves),
-        }
-    }
+        },
+        |_| (),
+        || println!("</ul></div>"),
+        header,
+    );
 }
 
 fn render_svg(wave: &mut Wave, end_time: u64) {
@@ -366,20 +272,6 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
                 (state, _) => state,
             }
         }
-        match state {
-            State::X(x) => add_undet(&mut svg_parts, x, end_time),
-            State::Wave(items) => add_wave(&mut svg_parts, items, end_time),
-            // Doesn't occur for a single element
-            State::Vec(..) => (),
-        }
-        wave.svg = Some(Svg {
-            wave: format!(
-                r#"<g class="wave" data-id="{}" data-size="1">{}</g>"#,
-                wave.var.code,
-                svg_parts.concat(),
-            ),
-            bits: Vec::new(),
-        })
     } else {
         for &(time, ref point) in &wave.values {
             use vcd::Value::*;
@@ -404,22 +296,23 @@ fn render_svg(wave: &mut Wave, end_time: u64) {
                 (state, _) => state,
             }
         }
-        match state {
-            State::X(x) => add_undet(&mut svg_parts, x, end_time),
-            State::Vec(x, items) => add_vec(&mut svg_parts, x, end_time, items),
-            // Doesn't occur for a vector
-            State::Wave(..) => (),
-        }
-        wave.svg = Some(Svg {
-            wave: format!(
-                r#"<g class="wave" data-id="{}" data-size="{}">{}</g>"#,
-                wave.var.code,
-                wave.var.size,
-                svg_parts.concat(),
-            ),
-            bits: Vec::new(),
-        })
     }
+    match state {
+        State::X(x) => add_undet(&mut svg_parts, x, end_time),
+        State::Wave(items) => add_wave(&mut svg_parts, items, end_time),
+        State::Vec(x, items) => add_vec(&mut svg_parts, x, end_time, items),
+    }
+    wave.svg = Some(Svg {
+        wave: format!(
+            r#"<svg class="wave" data-id="{id}" data-size="{size}" transform="scale(10 2)" width="{width}">{body}</svg>"#,
+            size = wave.var.size,
+            // text = wave.var.reference,
+            id = wave.var.code,
+            body = svg_parts.concat(),
+            width=end_time,
+        ),
+        bits: Vec::new(),
+    })
 }
 
 fn size(v: &Value) -> usize {

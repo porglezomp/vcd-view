@@ -1,0 +1,93 @@
+</div>
+</div>
+<script>
+let textRule = null;
+function findTextRule() {
+  const sheets = document.styleSheets;
+  let done = false;
+  for (let i = 0; i < sheets.length && !done; i++) {
+    const rules = sheets[i].cssRules;
+    for (let j = 0; j < rules.length; j++) {
+      if (rules[j].selectorText === 'text') {
+        textRule = rules[j];
+        done = true;
+        break;
+      }
+    }
+  }
+}
+
+function setScale(x, y) {
+  if (!textRule) { findTextRule(); }
+  document.querySelectorAll('svg.wave').forEach(svg =>
+    svg.setAttribute('transform', `scale(${x}, ${y})`));
+  textRule.style.transform = `scale(${1 / x}, ${1 / y})`;
+}
+
+function showVisibleWaves() {
+  let visible = 0;
+  document.querySelectorAll('.wave').forEach(elem => {
+    let id = elem.dataset.id;
+    let checkbox = document.querySelector(`input[type="checkbox"][data-id="${id}"]`);
+    let items = document.querySelectorAll(`li[data-id="${id}"]`);
+    if (checkbox.checked) {
+      items.forEach(elt => elt.classList.remove('hidden'));
+      visible += 1;
+    } else {
+      items.forEach(elt => elt.classList.add('hidden'));
+    }
+  });
+  waves.style.height = `${visible * 40 + 20}px`;
+}
+
+function updateIndeterminate(elt) {
+  if (!elt) return;
+  if (elt.classList.contains('scope')) {
+    let checkbox = elt.querySelector('.scope-checkbox');
+    let checkCount = elt.querySelectorAll('input[type="checkbox"]:checked').length;
+    let uncheckCount = elt.querySelectorAll('input[type="checkbox"]:not(:checked)').length;
+    if (checkbox.checked) { checkCount -= 1; } else { uncheckCount -= 1; }
+    if (checkCount !== 0 && uncheckCount !== 0) {
+      checkbox.indeterminate = true;
+      checkbox.checked = false;
+    } else if (checkCount !== 0) {
+      checkbox.indeterminate = false;
+      checkbox.checked = true;
+    } else if (uncheckCount !== 0) {
+      checkbox.indeterminate = false;
+      checkbox.checked = false;
+    }
+  }
+  updateIndeterminate(elt.parentElement);
+}
+
+function inputScale(elt) {
+  let x = parseFloat(elt.value);
+  if (x > 0) { setScale(x, 2.5) }
+}
+
+document.querySelectorAll('.arrow').forEach(elt =>
+  elt.addEventListener('click', event =>
+    event.currentTarget.parentElement.classList.toggle('closed')));
+
+document.querySelectorAll('input[type="checkbox"]').forEach(elt =>
+  elt.addEventListener('change', event => {
+    const elt = event.currentTarget;
+    if (elt.classList.contains('scope-checkbox')) {
+      elt.parentElement.parentElement
+        .querySelectorAll('input[type="checkbox"]')
+        .forEach(checkbox =>
+          checkbox.checked = elt.checked);
+    }
+    updateIndeterminate(elt);
+    showVisibleWaves();
+  }));
+document.getElementById('scale').addEventListener('change', event =>
+  inputScale(event.currentTarget));
+
+setScale(10, 2.5);
+showVisibleWaves();
+inputScale(document.getElementById('scale'));
+</script>
+</body>
+</html>
