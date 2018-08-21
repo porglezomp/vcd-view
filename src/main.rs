@@ -5,8 +5,7 @@ extern crate vcd;
 use std::collections::BTreeMap;
 use vcd::{Command, IdCode, Parser, ScopeItem, Var};
 
-static HEADER: &str = include_str!("header.html");
-static FOOTER: &str = include_str!("footer.html");
+static WRAPPER: &str = include_str!("wrapper.html");
 
 #[derive(Debug, PartialEq)]
 enum Value {
@@ -75,92 +74,96 @@ fn main() -> std::io::Result<()> {
         render_svg(wave, end_time);
     }
 
-    println!("{}", HEADER);
-    print_vars(&header);
-    println!(r#"<div id="display">"#);
-    print_names(&header);
-    print_waves(&header, &waves);
-    println!("{}", FOOTER);
+    let vars_text = format_vars(&header).concat();
+    let display_text = format_names(&header).concat() + &format_waves(&header, &waves).concat();
+    let html = WRAPPER
+        .replacen("$$$DISPLAY$$$", &display_text, 1)
+        .replacen("$$$CONTROLS$$$", &vars_text, 1);
+    println!("{}", html);
 
     Ok(())
 }
 
-fn walk_dfs(
-    open: impl Fn(),
-    open_scope: impl Fn(&vcd::Scope),
-    do_var: impl Fn(&Var),
-    close_scope: impl Fn(&vcd::Scope),
-    close: impl Fn(),
+fn walk_dfs<State>(
+    open: impl Fn() -> State,
+    open_scope: impl Fn(&mut State, &vcd::Scope),
+    do_var: impl Fn(&mut State, &Var),
+    close_scope: impl Fn(&mut State, &vcd::Scope),
+    close: impl Fn(&mut State),
     header: &vcd::Header,
-) {
-    fn walk_scope(
-        open_scope: &impl Fn(&vcd::Scope),
-        do_var: &impl Fn(&Var),
-        close_scope: &impl Fn(&vcd::Scope),
+) -> State {
+    fn walk_scope<State>(
+        open_scope: &impl Fn(&mut State, &vcd::Scope),
+        do_var: &impl Fn(&mut State, &Var),
+        close_scope: &impl Fn(&mut State, &vcd::Scope),
+        state: &mut State,
         s: &vcd::Scope,
     ) {
-        open_scope(s);
+        open_scope(state, s);
         for child in &s.children {
             match child {
-                ScopeItem::Var(var) => do_var(var),
-                ScopeItem::Scope(s) => walk_scope(open_scope, do_var, close_scope, s),
+                ScopeItem::Var(var) => do_var(state, var),
+                ScopeItem::Scope(s) => walk_scope(open_scope, do_var, close_scope, state, s),
             }
         }
-        close_scope(s);
+        close_scope(state, s);
     }
-    open();
+    let mut state = open();
     for item in &header.items {
         match item {
-            ScopeItem::Var(var) => do_var(var),
-            ScopeItem::Scope(scope) => walk_scope(&open_scope, &do_var, &close_scope, scope),
+            ScopeItem::Var(var) => do_var(&mut state, var),
+            ScopeItem::Scope(scope) => {
+                walk_scope(&open_scope, &do_var, &close_scope, &mut state, scope)
+            }
         }
     }
-    close();
+    close(&mut state);
+    state
 }
 
-fn print_vars(header: &vcd::Header) {
+fn format_vars(header: &vcd::Header) -> Vec<String> {
     walk_dfs(
-        || println!("<ul>"),
-        |s| {
-            println!(
+        || vec!["<ul>".into()],
+        |a, s| {
+            a.push(format!(
                 r#"<li class="scope closed">
 <div class="arrow"></div><label><input class="scope-checkbox" type="checkbox" data-name="{name}" checked/>{name}</label>
 <ul>"#,
                 name = s.identifier,
-            )
+            ));
         },
-        |v| {
-            println!(
+        |a, v| {
+            a.push(format!(
                 r#"<li class="var">
 <label><input type="checkbox" data-id="{id}" checked/>{name}</label></li>"#,
                 id = v.code,
                 name = v.reference,
-            )
+            ))
         },
-        |_| println!("</ul>\n</li>"),
-        || println!("</ul></div>"),
+        |a, _| a.push("</ul>\n</li>".into()),
+        |a| a.push("</ul>".into()),
         header,
-    );
+    )
 }
 
-fn print_names(header: &vcd::Header) {
+fn format_names(header: &vcd::Header) -> Vec<String> {
     walk_dfs(
-        || println!(r#"<div id="labels"><ul>"#),
-        |_| (),
-        |v| {
-            println!(
+        || vec![r#"<div id="labels"><ul>"#.into()],
+        |_, _| (),
+        |a, v| {
+            a.push(format!(
                 r#"<li data-id="{id}">{name}</li>"#,
                 id = v.code,
                 name = v.reference
-            )
+            ))
         },
-        |_| (),
-        || println!("</ul></div>"),
+        |_, _| (),
+        |a| a.push("</ul></div>".into()),
         header,
-    );
+    )
 }
 
-fn print_waves(header: &vcd::Header, waves: &BTreeMap<IdCode, Wave>) {
+fn format_waves(header: &vcd::Header, waves: &BTreeMap<IdCode, Wave>) -> Vec<String> {
     let wave_count: usize = waves
         .values()
         .map(|wave| match wave.svg {
@@ -169,21 +172,26 @@ fn print_waves(header: &vcd::Header, waves: &BTreeMap<IdCode, Wave>) {
         }).sum();
     let height = wave_count * 40 + 20;
     walk_dfs(
-        || println!(r#"<div id="waves" style="height: {}px;"><ul>"#, height),
-        |_| (),
-        |v| {
+        || {
+            vec![format!(
+                r#"<div id="waves" style="height: {}px;"><ul>"#,
+                height
+            )]
+        },
+        |_, _| (),
+        |a, v| {
             if let Some(ref svg) = waves[&v.code].svg {
-                println!(
+                a.push(format!(
                     r#"<li data-id="{id}">{wave}</li>"#,
                     id = v.code,
                     wave = svg.wave
-                );
+                ));
             }
         },
-        |_| (),
-        || println!("</ul></div>"),
+        |_, _| (),
+        |a| a.push("</ul></div>".into()),
         header,
-    );
+    )
 }
 
 fn render_svg(wave: &mut Wave, end_time: u64) {
