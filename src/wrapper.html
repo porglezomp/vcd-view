@@ -5,8 +5,9 @@
     <style>
 * { box-sizing: border-box; }
 body { margin: 0; overflow: hidden; }
-ul { padding-left: 10px; list-style: none; margin-top: 0; }
+ul { padding-left: 0; list-style: none; margin-top: 0; }
 ul ul { padding-left: 20px; }
+#controls ul { padding-left: 10px; }
 li.scope > .arrow {
   display: inline-block; width: 10px; height: 10px; border: solid black;
   border-width: 0 5px 5px 0; transform: rotate(45deg); margin: 0 2px 0 -12px;
@@ -19,12 +20,12 @@ li.scope.closed ul, .hidden { display: none; }
   display: flex; flex: 0 0 auto; width: 80vw; height: 100vh;
   overflow-y: scroll;
 }
-#labels { flex: 0 0 auto; width: 10vw; padding: 10px; }
+#labels { flex: 0 0 auto; width: 10vw; padding-top: 10px; }
 #waves {
   flex: 0 0 auto; width: 70vw; height: 100%; min-height: 100vh;
-  padding: 10px; overflow-x: scroll; overflow-y: hidden;
+  padding-top: 10px; overflow-x: scroll; overflow-y: hidden;
 }
-#display li { height: 40px; }
+#display li { border-top: 1px solid lightgrey; padding-top: 5px; height: 35px; }
 li > svg { transform-origin: top left; -webkit-transform-origin: top left; overflow: visible; }
 svg.wave { overflow: visible; }
 text { transform: scale(0.1, 0.5); text-anchor: middle; font-size: 10px; font-family: "Fira Code", Monaco, monospace; }
@@ -64,12 +65,14 @@ function findTextRule() {
 
 function setScale(x, y) {
   if (!textRule) { findTextRule(); }
-  document.querySelectorAll('svg.wave>g').forEach(g => {
-    g.setAttribute('transform', `scale(${x}, ${y})`)
-    const svg = g.parentElement;
-    svg.setAttribute('width', svg.getBBox().width);
-  });
   textRule.style.transform = `scale(${1 / x}, ${1 / y})`;
+  document.querySelectorAll('svg.wave>g').forEach(g => {
+    g.setAttribute('transform', `scale(${x}, ${y})`);
+    const svg = g.parentElement;
+    if (svg.getBoundingClientRect().height) {
+      svg.setAttribute('width', svg.getBBox().width);
+    }
+  });
   document.querySelectorAll('text').forEach(elt => {
     elt.style.display = 'none';
     elt.offsetHeight;
@@ -85,6 +88,10 @@ function showVisibleWaves() {
     let items = document.querySelectorAll(`li[data-id="${id}"]`);
     if (checkbox.checked) {
       items.forEach(elt => elt.classList.remove('hidden'));
+      const svg = document.querySelector(`li[data-id="${id}"] svg`);
+      if (svg.getBoundingClientRect().height) {
+        svg.setAttribute('width', svg.getBBox().width);
+      }
       visible += 1;
     } else {
       items.forEach(elt => elt.classList.add('hidden'));
@@ -123,7 +130,8 @@ document.querySelectorAll('.arrow').forEach(elt =>
   elt.addEventListener('click', event =>
     event.currentTarget.parentElement.classList.toggle('closed')));
 
-document.querySelectorAll('input[type="checkbox"]').forEach(elt =>
+document.querySelectorAll('input[type="checkbox"]').forEach(elt => {
+  updateIndeterminate(elt);
   elt.addEventListener('change', event => {
     const elt = event.currentTarget;
     if (elt.classList.contains('scope-checkbox')) {
@@ -134,11 +142,11 @@ document.querySelectorAll('input[type="checkbox"]').forEach(elt =>
     }
     updateIndeterminate(elt);
     showVisibleWaves();
-  }));
+  });
+});
 document.getElementById('scale').addEventListener('change', event =>
   inputScale(event.currentTarget));
 
-setScale(10, 2.5);
 showVisibleWaves();
 inputScale(document.getElementById('scale'));
     </script>
