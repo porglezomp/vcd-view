@@ -35,12 +35,10 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
     fn add_vec(parts: &mut Vec<String>, start: u64, end: u64, value: &[vcd::Value]) {
         parts.push(format!(
             r#"<rect class="vec" rx="1" ry="1" x="{x}" y="0" width="{width}" height="10"/>
-<svg x="{x}" y="0" width="{width}" height="10" preserveAspectRatio="none" viewBox="0 0 {width} 10">
-<text x="{center}" y="8">{text}</text>
-</svg>"#,
+<g transform="translate({center} 7)"><text>{text}</text></g>"#,
             x = start,
             width = end - start,
-            center = (end - start) / 2,
+            center = (end + start) / 2,
             text = FmtVec(value),
         ));
     }
@@ -127,7 +125,7 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
     }
     wave.svg = Some(Svg {
         wave: format!(
-            r#"<svg class="wave" data-id="{id}" data-size="{size}" transform="scale(10 2)" width="{width}">{body}</svg>"#,
+            r#"<svg class="wave" data-id="{id}" data-size="{size}" width="{width}"><g transform="scale(10 2)">{body}</g></svg>"#,
             size = wave.var.size,
             // text = wave.var.reference,
             id = wave.var.code,

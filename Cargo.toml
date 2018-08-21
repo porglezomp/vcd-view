@@ -5,3 +5,4 @@ authors = ["C Jones <code@calebjones.net>"]
 
 [dependencies]
 vcd = { git = "https://github.com/kevinmehall/rust-vcd.git" }
+web-view = "0.2.1"

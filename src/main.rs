@@ -1,6 +1,7 @@
 #![feature(nll)]
 
 extern crate vcd;
+extern crate web_view;
 
 use std::collections::BTreeMap;
 use vcd::{Command, IdCode, Parser, ScopeItem, Var};
@@ -77,7 +78,25 @@ fn main() -> std::io::Result<()> {
     let html = WRAPPER
         .replacen("$$$DISPLAY$$$", &display_text, 1)
         .replacen("$$$CONTROLS$$$", &vars_text, 1);
+
     println!("{}", html);
+
+    let size = (1024, 768);
+    let resizable = true;
+    let debug = true;
+    let init_cb = |_webview| {};
+    let frontend_cb = |_webview: &mut _, _arg: &_, _userdata: &mut _| {};
+    let userdata = ();
+    web_view::run(
+        "Waveform",
+        web_view::Content::Html(html),
+        Some(size),
+        resizable,
+        debug,
+        init_cb,
+        frontend_cb,
+        userdata,
+    );
 
     Ok(())
 }
