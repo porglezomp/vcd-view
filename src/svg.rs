@@ -1,6 +1,5 @@
-use super::Value;
-use super::Wave;
-use std::fmt;
+use super::{Value, Wave};
+use std::{fmt, mem};
 use vcd;
 
 #[derive(Debug)]
@@ -19,7 +18,6 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
         Vec(u64, &'a [vcd::Value]),
         X(u64),
     }
-    let mut svg_parts = Vec::new();
 
     fn add_undet(parts: &mut Vec<String>, start: u64, end: u64) {
         if start == end {
@@ -43,7 +41,7 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
         ));
     }
 
-    fn add_wave(parts: &mut Vec<String>, items: Vec<(u64, bool)>, end_time: u64) {
+    fn add_wave(parts: &mut Vec<String>, items: &[(u64, bool)], end_time: u64) {
         fn wave(b: bool) -> u32 {
             if b {
                 0
@@ -65,8 +63,9 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
         parts.push(text)
     }
 
-    let mut state = State::X(0);
-    if wave.var.size == 1 {
+    fn make_wave(wave: &Wave, end_time: u64, bit: Option<usize>) -> String {
+        let mut svg_parts = Vec::new();
+        let mut state = State::X(0);
         for &(time, ref point) in &wave.values {
             use vcd::Value::*;
             state = match (state, point) {
@@ -87,24 +86,44 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
                     State::Wave(items)
                 }
                 (State::Wave(items), Value::Scalar(X)) | (State::Wave(items), Value::Scalar(Z)) => {
-                    add_wave(&mut svg_parts, items, time);
+                    add_wave(&mut svg_parts, &items, time);
                     State::X(time)
                 }
-                (state, _) => state,
-            }
-        }
-    } else {
-        for &(time, ref point) in &wave.values {
-            use vcd::Value::*;
-            state = match (state, point) {
-                (State::X(x), Value::Vector(items)) => {
-                    add_undet(&mut svg_parts, x, time);
-                    State::Vec(time, &items)
+                (State::Wave(ref mut items), Value::Vector(ref vec)) => match vec[bit.unwrap()] {
+                    V0 => {
+                        items.push((time, false));
+                        State::Wave(mem::replace(items, Vec::new()))
+                    }
+                    V1 => {
+                        items.push((time, true));
+                        State::Wave(mem::replace(items, Vec::new()))
+                    }
+                    Z | X => {
+                        add_wave(&mut svg_parts, items, time);
+                        State::X(time)
+                    }
+                },
+                (State::X(x), Value::Vector(vec)) => {
+                    if let Some(bit) = bit {
+                        match vec[bit] {
+                            V0 => State::Wave(vec![(time, false)]),
+                            V1 => State::Wave(vec![(time, true)]),
+                            X | Z => State::X(x),
+                        }
+                    } else if vec.contains(&X) || vec.contains(&Z) {
+                        State::X(x)
+                    } else {
+                        add_undet(&mut svg_parts, x, time);
+                        State::Vec(time, &vec)
+                    }
                 }
-                (State::Vec(x, items), Value::Vector(items2)) => {
-                    if items != &items2[..] {
+                (State::Vec(x, items), Value::Vector(vec)) => {
+                    if vec.contains(&X) || vec.contains(&Z) {
                         add_vec(&mut svg_parts, x, time, items);
-                        State::Vec(time, &items2)
+                        State::X(time)
+                    } else if items != &vec[..] {
+                        add_vec(&mut svg_parts, x, time, items);
+                        State::Vec(time, &vec)
                     } else {
                         State::Vec(x, &items)
                     }
@@ -117,22 +136,33 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
                 (state, _) => state,
             }
         }
-    }
-    match state {
-        State::X(x) => add_undet(&mut svg_parts, x, end_time),
-        State::Wave(items) => add_wave(&mut svg_parts, items, end_time),
-        State::Vec(x, items) => add_vec(&mut svg_parts, x, end_time, items),
+        match state {
+            State::X(x) => add_undet(&mut svg_parts, x, end_time),
+            State::Wave(items) => add_wave(&mut svg_parts, &items, end_time),
+            State::Vec(x, items) => add_vec(&mut svg_parts, x, end_time, items),
+        }
+        svg_parts.concat()
     }
     wave.svg = Some(Svg {
         wave: format!(
             r#"<svg class="wave" data-id="{id}" data-size="{size}" width="{width}"><g transform="scale(10 2)">{body}</g></svg>"#,
             size = wave.var.size,
-            // text = wave.var.reference,
             id = wave.var.code,
-            body = svg_parts.concat(),
+            body = make_wave(&wave, end_time, None),
             width=end_time,
         ),
-        bits: Vec::new(),
+        bits: if wave.var.size == 1 {
+            Vec::new()
+        } else {
+            (0..wave.var.size).map(|bit| {
+                format!(r#"<svg class="wave" data-id="{id} {bit}" data-size="1" width="{width}"><g transorm="scale(10 2)">{body}</g></svg>"#,
+                        id = wave.var.code,
+                        bit = bit,
+                        body = make_wave(&wave, end_time, Some(bit as usize)),
+                        width=end_time,
+                )
+            }).collect()
+        },
     })
 }
 

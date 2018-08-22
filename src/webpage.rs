@@ -52,12 +52,32 @@ pub(crate) fn format_vars(header: &vcd::Header) -> Vec<String> {
             ));
         },
         |a, v| {
-            a.push(format!(
-                r#"<li class="var">
+            if v.size > 1 {
+                a.push(format!(
+                    r#"<li class="var closed">
+<div class="arrow"></div><label><input class="scope-checkbox" type="checkbox" data-id="{id}" checked/>{name} [{maxbit}:0]</label>
+<ul>"#,
+                    id = v.code,
+                    name = v.reference,
+                    maxbit = v.size - 1,
+                ));
+                for bit in (0..v.size).rev() {
+                    a.push(format!(
+                        r#"<li class="var"><label><input type="checkbox" data-id="{id} {bit}" checked/>{name} [{bit}]</label></li>"#,
+                        id = v.code,
+                        name = v.reference,
+                        bit = bit,
+                    ));
+                }
+                a.push("</ul></li>".into());
+            } else {
+                a.push(format!(
+                    r#"<li class="var">
 <label><input type="checkbox" data-id="{id}" checked/>{name}</label></li>"#,
-                id = v.code,
-                name = v.reference,
-            ))
+                    id = v.code,
+                    name = v.reference,
+                ))
+            }
         },
         |a, _| a.push("</ul>\n</li>".into()),
         |a| a.push("</ul>".into()),
@@ -70,11 +90,28 @@ pub(crate) fn format_names(header: &vcd::Header) -> Vec<String> {
         || vec![r#"<div id="labels"><ul>"#.into()],
         |_, _| (),
         |a, v| {
-            a.push(format!(
-                r#"<li data-id="{id}">{name}</li>"#,
-                id = v.code,
-                name = v.reference
-            ))
+            if v.size > 1 {
+                a.push(format!(
+                    r#"<li data-id="{id}">{name} [{maxbit}:0]</li>"#,
+                    id = v.code,
+                    name = v.reference,
+                    maxbit = v.size - 1,
+                ));
+                for bit in (0..v.size).rev() {
+                    a.push(format!(
+                        r#"<li data-id="{id} {bit}">{name} [{bit}]</li>"#,
+                        id = v.code,
+                        name = v.reference,
+                        bit = bit
+                    ));
+                }
+            } else {
+                a.push(format!(
+                    r#"<li data-id="{id}">{name}</li>"#,
+                    id = v.code,
+                    name = v.reference,
+                ));
+            }
         },
         |_, _| (),
         |a| a.push("</ul></div>".into()),
@@ -105,6 +142,14 @@ pub(crate) fn format_waves(header: &vcd::Header, waves: &BTreeMap<IdCode, Wave>)
                     id = v.code,
                     wave = svg.wave
                 ));
+                for (bit, wave) in svg.bits.iter().enumerate().rev() {
+                    a.push(format!(
+                        r#"<li data-id="{id} {bit}">{wave}</li>"#,
+                        id = v.code,
+                        bit = bit,
+                        wave = wave
+                    ));
+                }
             }
         },
         |_, _| (),

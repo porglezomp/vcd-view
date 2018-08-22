@@ -8,12 +8,12 @@ body { margin: 0; overflow: hidden; }
 ul { padding-left: 0; list-style: none; margin-top: 0; }
 ul ul { padding-left: 20px; }
 #controls ul { padding-left: 10px; }
-li.scope > .arrow {
+li > .arrow {
   display: inline-block; width: 10px; height: 10px; border: solid black;
   border-width: 0 5px 5px 0; transform: rotate(45deg); margin: 0 2px 0 -12px;
 }
-li.scope.closed > .arrow { transform: rotate(-45deg); }
-li.scope.closed ul, .hidden { display: none; }
+li.closed > .arrow { transform: rotate(-45deg); }
+li.closed ul, .hidden { display: none; }
 #container { height: 100vh; display: flex; }
 #controls { flex: 0 0 auto; padding: 10px; overflow-y: scroll; width: 20vw; }
 #display {
@@ -86,7 +86,7 @@ function showVisibleWaves() {
     let id = elem.dataset.id;
     let checkbox = document.querySelector(`input[type="checkbox"][data-id="${id}"]`);
     let items = document.querySelectorAll(`li[data-id="${id}"]`);
-    if (checkbox.checked) {
+    if (checkbox.checked || checkbox.indeterminate) {
       items.forEach(elt => elt.classList.remove('hidden'));
       const svg = document.querySelector(`li[data-id="${id}"] svg`);
       if (svg.getBoundingClientRect().height) {
@@ -102,20 +102,22 @@ function showVisibleWaves() {
 
 function updateIndeterminate(elt) {
   if (!elt) return;
-  if (elt.classList.contains('scope')) {
+  if (elt.classList.contains('scope') || elt.classList.contains('var')) {
     let checkbox = elt.querySelector('.scope-checkbox');
-    let checkCount = elt.querySelectorAll('input[type="checkbox"]:checked').length;
-    let uncheckCount = elt.querySelectorAll('input[type="checkbox"]:not(:checked)').length;
-    if (checkbox.checked) { checkCount -= 1; } else { uncheckCount -= 1; }
-    if (checkCount !== 0 && uncheckCount !== 0) {
-      checkbox.indeterminate = true;
-      checkbox.checked = false;
-    } else if (checkCount !== 0) {
-      checkbox.indeterminate = false;
-      checkbox.checked = true;
-    } else if (uncheckCount !== 0) {
-      checkbox.indeterminate = false;
-      checkbox.checked = false;
+    if (checkbox) {
+      let checkCount = elt.querySelectorAll('input[type="checkbox"]:checked').length;
+      let uncheckCount = elt.querySelectorAll('input[type="checkbox"]:not(:checked)').length;
+      if (checkbox.checked) { checkCount -= 1; } else { uncheckCount -= 1; }
+      if (checkCount !== 0 && uncheckCount !== 0) {
+        checkbox.indeterminate = true;
+        checkbox.checked = false;
+      } else if (checkCount !== 0) {
+        checkbox.indeterminate = false;
+        checkbox.checked = true;
+      } else if (uncheckCount !== 0) {
+        checkbox.indeterminate = false;
+        checkbox.checked = false;
+      }
     }
   }
   updateIndeterminate(elt.parentElement);
