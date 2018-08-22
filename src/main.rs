@@ -7,6 +7,7 @@ extern crate web_view;
 use clap::{App, Arg};
 use std::collections::BTreeMap;
 use std::io::{self, Write};
+use std::iter;
 use vcd::{Command, IdCode, Parser, ScopeItem, Var};
 
 mod svg;
@@ -75,20 +76,8 @@ fn main() -> io::Result<()> {
     }
 
     for wave in waves.values_mut() {
-        for &mut (time, ref mut item) in &mut wave.values {
-            normalize(item);
-            if size(item) != wave.var.size as usize {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!(
-                        "Value at time {} in {} has invalid width (expected {}, got {})",
-                        time,
-                        wave.var.reference,
-                        wave.var.size,
-                        size(item),
-                    ),
-                ));
-            }
+        for (_, item) in &mut wave.values {
+            normalize(item, wave.var.size as usize);
         }
     }
     let end_time = waves
@@ -138,17 +127,16 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn size(v: &Value) -> usize {
-    match v {
-        Value::Scalar(_) => 1,
-        Value::Vector(v) => v.len(),
-    }
-}
-
-fn normalize(v: &mut Value) {
+fn normalize(v: &mut Value, width: usize) {
     if let Value::Vector(x) = v {
-        if x.len() == 1 {
-            *v = Value::Scalar(x[0]);
+        if !x.is_empty() && width == 1 {
+            *v = Value::Scalar(*x.last().unwrap());
+        } else if x.len() > width {
+            // Left-truncate to the appropriate width
+            x.drain(0..(x.len() - width));
+        } else if x.len() < width {
+            // Left pad with V0, to the appropriate width
+            x.splice(0..0, iter::repeat(vcd::Value::V0).take(width - x.len()));
         }
     }
 }
