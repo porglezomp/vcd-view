@@ -53,7 +53,7 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
         let (first, items) = items.split_first().unwrap();
         let mut prev = first;
         let mut text = format!(r#"<polyline points="{} {},"#, first.0, wave(first.1));
-        let mut y = 0;
+        let mut y = wave(first.1);
         for item in items {
             y = wave(item.1);
             if prev.1 != item.1 {
