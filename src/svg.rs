@@ -56,7 +56,9 @@ pub(crate) fn render_svg(wave: &mut Wave, end_time: u64) {
         let mut y = 0;
         for item in items {
             y = wave(item.1);
-            text += &format!("{} {},{} {},", item.0, wave(prev.1), item.0, y);
+            if prev.1 != item.1 {
+                text += &format!("{} {},{} {},", item.0, wave(prev.1), item.0, y);
+            }
             prev = item;
         }
         text += &format!(r#"{} {}"/>"#, end_time, y);
