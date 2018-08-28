@@ -6,6 +6,6 @@ description = """A lightweight waveform viewer for value change dumps.
 Either opens a viewer window or outputs an HTML page containing the waveforms."""
 
 [dependencies]
-vcd = { git = "https://github.com/kevinmehall/rust-vcd.git" }
+vcd = "0.4"
 web-view = "0.2.1"
 clap = { version = "2.32", features = ["wrap_help"] }
